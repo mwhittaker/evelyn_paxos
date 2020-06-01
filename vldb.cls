@@ -251,7 +251,9 @@
 \allauboxes=\auwidth
 \newtoks\addauthors
 \newcount\addauflag
-\global\addauflag=0 %Haven't shown additional authors yet
+% Originally:
+% \global\addauflag=0 %Haven't shown additional authors yet
+\global\addauflag=1 %Haven't shown additional authors yet
 
 \newtoks\subtitletext
 \gdef\subtitle#1{\subtitletext={#1}}

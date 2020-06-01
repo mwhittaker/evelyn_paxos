@@ -9,8 +9,6 @@ assume clock synchronization. Every protocol discussed in this paper assumes
 that at most $f$ machines will fail for some configurable $f$.
 
 \subsection{Paxos}
-
-\subsection{Paxos}
 \defword{Consensus} is the act of choosing a single value among a set of
 proposed values. \defword{Paxos}~\cite{lamport1998part} is the most popular
 consensus protocol. We assume the reader is familiar with Paxos, but we pause
@@ -97,11 +95,78 @@ partitioned across the replicas. With $n$ replicas for example, replica $r_i$
 returns results for log entries $j$ where $j \bmod n \equiv i$.
 
 \subsection{Compartmentalized MultiPaxos}
+Compartmentalized MultiPaxos~\cite{whittaker2020compartmentalized} is a
+high-throughput MultiPaxos variant that differs from MultiPaxos in the
+following three ways:
 
-compartmentalized paxos introduces three things
-- proxy leaders
-- multiple acceptor groups
-- increased number of replicas
+\textbf{Difference 1: Proxy Leaders.}
+In a MultiPaxos deployment, every state machine command is sent to the leader,
+and the leader has to perform disproportionately more work per command than the
+acceptors and replicas (in most cases). Because of this, the MultiPaxos leader
+is a throughput bottleneck. MultiPaxos can process commands only as fast as the
+leader can.
+
+Compartmentalized MultiPaxos alleviates the leader bottleneck by noting that
+the MultiPaxos leader performs two independent responsibilities: sequencing and
+communication. When the leader receives a state machine command, it assigns the
+command a log entry. The first command is assigned log entry 0, the second is
+assigned log entry 1, and so on. We call this \emph{sequencing}. The leader
+also has to communicate with the acceptors to execute Phase 2 of Paxos. We call
+this \emph{communication}. Compartmentalized MultiPaxos decouples the two
+responsibilities of sequencing and communication by introducing a set of at
+least $f+1$ \defword{proxy leaders}.
+
+After this decoupling, the leader performs sequencing, while the proxy leaders
+perform communication. Concretely, when a leader receives a state machine
+command, it assigns the command a log entry and then forms a \msgfont{Phase2a}
+message, as before. Now, however, it does \emph{not} communicate with the
+acceptors.  Instead, it sends the \msgfont{Phase2a} message to a randomly
+chosen proxy leader, and the proxy leader performs Phase 2 of Paxos and
+notifies the replicas of the chosen command. This is illustrated in
+\figref{MultiPaxosProxyLeadersDiagram}.
+
+Note that because the leader load balances commands across the proxy leaders,
+and because the proxy leaders are independent, we can scale up the number of
+proxy leaders to avoid them being a throughput bottleneck.
+
+{\input{figures/multipaxos_proxy_leaders_diagram.tex}}
+
+\textbf{Difference 2: Acceptor Groups.}
+MultiPaxos traditionally deploys a fixed set of $2f+1$ acceptors. For a
+\emph{single log entry}, the correctness of MultiPaxos depends crucially on
+this fact. However, Compartmentalized MultiPaxos notes that \emph{two
+different log entries} are independent and can use two different sets of
+acceptors.
+%
+Thus, Compartmentalized MultiPaxos deploys multiple sets of $2f+1$ acceptors,
+called \defword{acceptor groups}, with log entries round-robin partitioned
+between them. For example, with two acceptor groups, log entries 0, 2, 4, 6,
+$\ldots$ are chosen by the first acceptor group while log entries 1, 3, 5, 7,
+$\ldots$ are chosen by the second acceptor group. When a proxy leader receives
+a \msgfont{Phase2a} message from the leader in log entry $i$, it is careful to
+contact the appropriate acceptor group (i.e.\ acceptor group $i \bmod m$ for
+$m$ acceptor groups).
+%
+This is illustrated in \figref{MultiPaxosMoreAcceptorsDiagram}.
+
+{\input{figures/multipaxos_more_acceptors_diagram.tex}}
+
+\textbf{Difference 3: More Replicas.}
+MultiPaxos is typically deployed with $f+1$ state machine replicas. MultiPaxos
+\emph{can} be deployed with more replicas, but the MultiPaxos leader has to
+contact \emph{every} replica. So, if we increase the number of replicas, the
+leader has to send more messages per command and becomes more of a throughput
+bottleneck.
+
+Compartmentalized MultiPaxos, on the other hand, can be deployed with a larger
+number of replicas without decreasing throughput, as illustrated in
+\figref{MultiPaxosMoreReplicasDiagram}. As we increase the number of
+Compartmentalized MultiPaxos replicas, every proxy leader has to send more
+messages per command, but the leader does not.  Moreover, as we increase the
+number of replicas, we can also increase the number of proxy leaders (as
+needed) to avoid them becoming a throughput bottleneck.
+
+{\input{figures/multipaxos_more_replicas_diagram.tex}}
 
 \subsection{Linearizability, Intuitively}
 

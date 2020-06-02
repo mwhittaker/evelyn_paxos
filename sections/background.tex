@@ -207,8 +207,8 @@ writes $0$ into the register, then $1$, and then reads the value $1$ (the
 latest value written). This hypothetical execution is \emph{not} consistent
 with the real execution because $c_1$ reads $1$ instead of $0$.
 
-Now consider the hypothetical execution in \figref{LinearizableExampleLin} in
-which we execute $w(1)$, then $w(0)$, and then $r()$. This execution is
+Now consider the hypothetical execution in \figref{LinearizableExampleGoodLin}
+in which we execute $w(1)$, then $w(0)$, and then $r()$. This execution is
 consistent with the real execution. Note that $c_1$ reads $0$ in both
 executions. Such a hypothetical execution---one that is consistent with the
 real execution---is called a \defword{linearization}. Note that from the
@@ -226,5 +226,122 @@ not linearizable. Try to find a linearization. You'll see that it's impossible.
 {\input{figures/not_linearizable_example.tex}}
 
 \subsection{Linearizability, Formally}
+\newcommand{\invocation}[2]{#2.\textcolor{flatred}{#1}}
+\newcommand{\response}[2]{#2.\textcolor{flatblue}{#1}}
+\newcommand{\subhistory}[2]{#1\,|\,#2}
+
+We now formalize our intuition on
+linearizability~\cite{herlihy1990linearizability}. A \defword{history} is a
+finite sequence of operation \defword{invocation} and \defword{response}
+events. For example, the following history:
+\[
+  H_{wwr} =
+  \invocation{w(0)}{c_1};\>
+  \invocation{w(1)}{c_2};\>
+  \response{\text{OK}}{c_1};\>
+  \response{\text{OK}}{c_2};\>
+  \invocation{r()}{c_1};\>
+  \response{0}{c_1}
+\]
+is the history illustrated in \figref{LinearizableExampleNoLin}. We draw
+invocation events in red, and response events in blue. We call an invocation
+and matching response an \defword{operation}. In $H_{wwr}$, every invocation is
+followed eventually by a corresponding response, but this is not always the
+case. An invocation in a history is \defword{pending} if there does not exist a
+corresponding response. For example, in the history $H_\text{pending}$ below,
+$c_2$'s invocation is pending:
+\[
+  H_{\text{pending}} =
+  \invocation{w(0)}{c_1};\>
+  \invocation{w(1)}{c_2};\>
+  \response{\text{OK}}{c_1};\>
+  \invocation{r()}{c_1};\>
+  \response{0}{c_1}
+\]
+$H_{\text{pending}}$ is illustrated in \figref{PendingLinearizableExample}.
+complete$(H)$ is the subhistory of $H$ that only includes non-pending
+operations. For example,
+\[
+  \text{complete}(H_{\text{pending}}) =
+  \invocation{w(0)}{c_1};\>
+  \response{\text{OK}}{c_1};\>
+  \invocation{r()}{c_1};\>
+  \response{0}{c_1}
+\]
+
+{\input{figures/pending_linearizable_example.tex}}
+
+A \defword{client subhistory}, $\subhistory{H}{c_i}$, of a history $H$ is the
+subsequence of all events in $H$ associated with client $c_i$. Referring again
+to $H_{wwr}$ above, we have:
+\begin{gather*}
+  \subhistory{H_{wwr}}{c_1}
+    = \invocation{w(0)}{c_1};\>
+      \response{\text{OK}}{c_1};\>
+      \invocation{r()}{c_1};\>
+      \response{0}{c_1} \\
+  \subhistory{H_{wwr}}{c_2}
+    = \invocation{w(1)}{c_2};\>
+      \response{\text{OK}}{c_2}
+\end{gather*}
+$\subhistory{H_{wwr}}{c_1}$ is illustrated in \figref{SubhistoryExample}.
+
+{\input{figures/subhistory_example.tex}}
+
+Two histories $H$ and $H'$ are \defword{equivalent} if for every client $c_i$,
+$\subhistory{H}{c_i} = \subhistory{H'}{c_i}$. For example, consider the
+following history:
+\[
+  H_{wrw} =
+  \invocation{w(0)}{c_1};\>
+  \response{\text{OK}}{c_1};\>
+  \invocation{r()}{c_1};\>
+  \invocation{w(1)}{c_2};\>
+  \response{0}{c_1};\>
+  \response{\text{OK}}{c_2}
+\]
+$H_{wrw}$ is illustrated in \figref{EquivalentExample}. $H_{wwr}$ is
+equivalent to $H_{wrw}$ because
+\begin{gather*}
+  \subhistory{H_{wwr}}{c_1}
+    = \invocation{w(0)}{c_1};\>
+      \response{\text{OK}}{c_1};\>
+      \invocation{r()}{c_1};\>
+      \response{0}{c_1}
+    = \subhistory{H_{wrw}}{c_1} \\
+  \subhistory{H_{wwr}}{c_2}
+    = \invocation{w(1)}{c_2};\>
+      \response{\text{OK}}{c_2};\>
+    = \subhistory{H_{wrw}}{c_2}
+\end{gather*}
+
+{\input{figures/equivalent_example.tex}}
+
+A history $H$ induces an irreflexive partial order $<_H$ on operations where
+$o_1 <_H o_2$ if the response of $o_1$ precedes the invocation of $o_2$ in $H$.
+If $o_1 <_H o_2$, we say $o_1$ \defword{happens before} $o_2$. In $H_{wwr}$ for
+example, $c_2$'s operation happens before $c_1$'s second operation. In
+$H_{wrw}$, on the other hand, the two operations are not ordered by the happens
+before relation. This shows that equivalent histories may not have the same
+happens before relation.
+
+Finally, a history $H$ is \defword{linearizable} if it can be extended (by
+appending zero or more response events) to some history $H'$ such that (a)
+complete($H'$) is equivalent to some sequential history $S$, and (b) $<_H$
+respects $<_S$ (i.e.\ if two operations are ordered in $H$, they must also be
+ordered in $S$). $S$ is called a \defword{linearization}. The history
+$H_{wwr}$, for example, is linearizable with the linearization
+\[
+  S_{wwr} =
+  \invocation{w(1)}{c_2};\>
+  \response{\text{OK}}{c_2};\>
+  \invocation{w(0)}{c_1};\>
+  \response{\text{OK}}{c_1};\>
+  \invocation{r()}{c_1};\>
+  \response{0}{c_1}
+\]
+illustrated in \figref{LinearizationExample}
+
+{\input{figures/linearization_example.tex}}
 
 \subsection{Linearizable Quorum Reads}

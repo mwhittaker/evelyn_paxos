@@ -1,1 +1,44 @@
 \section{Introduction}
+
+\begin{itemize}
+  \item
+    State machine replication is a very important thing.
+
+  \item
+    With traditional state machine replication, every command has to be
+    executed by every replica, so the protocol cannot run faster than a single
+    replica.
+
+  \item
+    This is safe but overly restrictive. Recent state machine replication
+    protocols have noted that while writes have to be executed by all replicas,
+    reads can be processed by a single replica. So, we can scale up the number
+    of replicas and scale up the read throughput of the system. This is
+    especially useful since a lot of workloads are read-heavy.
+
+  \item
+    Existing protocols, however, have limitations. Harmonia requires
+    specialized hardware and assumes clock synchrony for correctness. CRAQ is
+    sensitive to data skew and is forced to trade off read throughput and write
+    latency. It's also based on Chain Replication, so the failure of any
+    machine stalls the protocol.
+
+  \item
+    This paper presents two main contributions. First, we present a novel state
+    machine replication protocol with scalable read throughput that doesn't
+    suffer the limitations of existing approaches. Our protocol, called Evelyn
+    Paxos, combines two existing protocols, Compartmentalized MultiPaxos and
+    Linearizable Quorum Reads, in a straightforward way.
+
+  \item
+    Second, we prove a surprising impossibility result. Existing papers claim
+    to achieve ``scalable throughput'', but what exactly does this mean? Well,
+    imagine we have a workload with a fixed write fraction. Given a desired
+    throughput, we would like to be able to scale up the number of replicas to
+    achieve this throughput. Surprisingly, this is impossible. We prove that
+    for any state machine replication protocol in which writes are executed by
+    all replicas (e.g., Evelyn Paxos, Harmonia, CRAQ), and for any workload
+    with a fixed fraction $f_w > 0$ of writes, the protocol's throughput is
+    always upper bounded by a constant proportional to $\frac{1}{f_w}$, even
+    with an infinite amount of resources.
+\end{itemize}

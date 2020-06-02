@@ -1,5 +1,6 @@
 \usepackage{pervasives}
 
+% Communication Diagrams. %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Component colors.
 \colorlet{clientcolor}{white}
 \colorlet{batchercolor}{flatblue}
@@ -67,4 +68,59 @@
     -- (\thenode.south west)
     -- cycle;
   \end{scope}
+}}
+
+
+% Linearizability Diagrams. %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\tikzstyle{operation}=[line width=1.25pt]
+\tikzstyle{linlabel}=[inner sep=2pt, anchor=south west, rotate=30]
+\tikzstyle{linline}=[operation, flatgreen]
+\tikzstyle{notlinline}=[operation, flatred]
+
+\newcommand{\pendingoperation}[3]{
+  \draw[operation] (#1) to (#2);
+  \draw[operation] (#1) to ++ (0, 0.1);
+  \draw[operation] (#1) to ++ (0, -0.1);
+  \node[anchor=west] at (#2) {$\cdots$};
+  \node[anchor=south] at ($(#1)!0.5!(#2)$) {#3};
+}
+
+\newcommand{\drawclients}[2]{
+  \foreach \i in {1, ..., #1} {
+    \node[anchor=east] (c\i) at (0, -\i) {$c_\i$};
+    \draw[thick, flatgray, -latex] (0, -\i) to (#2, -\i);
+  }
+}
+
+\newcommand{\operation}[5]{{
+  \newcommand{\client}{#1}
+  \newcommand{\startx}{#2}
+  \newcommand{\stopx}{#3}
+  \newcommand{\cmd}{#4}
+  \newcommand{\reply}{#5}
+  \draw[operation] (\startx, -\client) to (\stopx, -\client);
+  \draw[operation] (\startx, -\client) to ++ (0, 0.1);
+  \draw[operation] (\startx, -\client) to ++ (0, -0.1);
+  \draw[operation] (\stopx, -\client) to ++ (0, 0.1);
+  \draw[operation] (\stopx, -\client) to ++ (0, -0.1);
+  \node[linlabel] (cmd) at (\startx, -\client) {\cmd};
+  \node[linlabel] at (\stopx, -\client) {\reply};
+}}
+
+\newcommand{\linpoint}[3]{{
+  \newcommand{\client}{#1}
+  \newcommand{\pointx}{#2}
+  \newcommand{\pointname}{#3}
+  \node[inner sep=0pt] (\pointname) at (\pointx, -\client) {};
+  \draw[linline] (\pointx, -\client) to ++ (0, 0.1);
+  \draw[linline] (\pointx, -\client) to ++ (0, -0.1);
+}}
+
+\newcommand{\notlinpoint}[3]{{
+  \newcommand{\client}{#1}
+  \newcommand{\pointx}{#2}
+  \newcommand{\pointname}{#3}
+  \node[inner sep=0pt] (\pointname) at (\pointx, -\client) {};
+  \draw[notlinline] (\pointx, -\client) to ++ (0, 0.1);
+  \draw[notlinline] (\pointx, -\client) to ++ (0, -0.1);
 }}

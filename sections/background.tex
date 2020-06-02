@@ -169,6 +169,61 @@ needed) to avoid them becoming a throughput bottleneck.
 {\input{figures/multipaxos_more_replicas_diagram.tex}}
 
 \subsection{Linearizability, Intuitively}
+Linearizability is a correctness condition for distributed
+systems~\cite{herlihy1990linearizability}.  Intuitively, a linearizable
+distributed system is indistinguishable from a system running on a single
+machine that services all requests serially. This makes a linearizable system
+easy to reason about. In this subsection, we explain the intuition behind
+linearizability, and in the next subsection, we formalize the intuition.
+
+Consider a distributed system that implements a single register. Clients can
+send requests to the distributed system to read or write the register. After a
+client sends a read or write request, it waits a bit before receiving a
+response. Note that a client can have at most one operation pending at any
+point in time.
+
+{\input{figures/linearizable_example.tex}}
+
+As a simple example, consider the execution illustrated in
+\figref{LinearizableExampleNoLin} where the $x$-axis represents the passage of
+time (real time, not logical time~\cite{lamport2019time}). This execution
+involves two clients, $c_1$ and $c_2$. Client $c_1$ sends a $w(0)$ request to
+the system, requesting that the value $0$ be written to the register. Then,
+client $c_2$ sends a $w(1)$ request, requesting that the value $1$ be written
+to the register. The system then sends acknowledgments to $c_1$ and $c_2$
+before $c_1$ sends a read request and receives the value $0$.
+
+For every client request, let's associate the request with a point in time that
+falls between when the client sent the request and when the client received the
+corresponding response. Next, let us imagine that the system executes every
+request instantaneously at the point in time associated with the request. This
+hypothetical execution may or may not be consistent with the real execution.
+
+For example, in \figref{LinearizableExampleNoLin}, we have associated every
+request with a point halfway between its invocation and response. Thus, in this
+hypothetical execution, the system executes $c_1$'s $w(0)$ request, then
+$c_2$'s $w(1)$ request, and finally $c_1$'s $r()$ request. In other words, it
+writes $0$ into the register, then $1$, and then reads the value $1$ (the
+latest value written). This hypothetical execution is \emph{not} consistent
+with the real execution because $c_1$ reads $1$ instead of $0$.
+
+Now consider the hypothetical execution in \figref{LinearizableExampleLin} in
+which we execute $w(1)$, then $w(0)$, and then $r()$. This execution is
+consistent with the real execution. Note that $c_1$ reads $0$ in both
+executions. Such a hypothetical execution---one that is consistent with the
+real execution---is called a \defword{linearization}. Note that from the
+clients' perspective, the real execution is indistinguishable from its
+linearization. Maybe the distributed register really is executing our requests
+at exactly the points in time that we selected? There's no way for the clients
+to prove otherwise.
+
+If an execution has a linearization, we say the execution is
+\defword{linearizable}. Similarly, if a system only allows linearizable
+executions, we say the system is linearizable. Note that not every execution is
+linearizable. The execution in \figref{NotLinearizableExample}, for example, is
+not linearizable. Try to find a linearization. You'll see that it's impossible.
+
+{\input{figures/not_linearizable_example.tex}}
 
 \subsection{Linearizability, Formally}
 

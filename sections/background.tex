@@ -345,3 +345,49 @@ illustrated in \figref{LinearizationExample}
 {\input{figures/linearization_example.tex}}
 
 \subsection{Linearizable Quorum Reads}
+For a given state machine, we say that a state machine command is a
+\defword{read} if executing the command does \emph{not} change the state of the
+state machine. We call all other commands \defword{writes}. In MultiPaxos,
+\emph{every} command---read or write---is executed by \emph{every} replica.
+Every replica has to execute every write.  Otherwise, the replicas' states
+would diverge. However, because executing a read does not lead to a change in
+state, it is safe for a read to be executed by a \emph{single} replica, rather
+than \emph{every} replica.
+
+However, we cannot throw caution to the wind and start firing off read requests
+from the hip. To ensure linearizability, we must take extra precautions. For
+example, if a client were to send a read request directly to a replica for
+execution, the client would start to observe anomalies not permitted by a
+linearizable system. It may read stale data or may not read its own writes, for
+example.
+%
+Some systems~\cite{burrows2006chubby} use leases to ensure linearizability, but
+this relies on clock synchrony for correctness (an assumption we do not make in
+this paper). Other systems~\cite{bolosky2011paxos,ongaro2013search} rely on
+techniques that funnel reads through the leader. It will become clear later
+that these leader-based techniques do not allow for scalable reads.
+%
+The Paxos Quorum Read protocol (PQR)~\cite{charapko2019linearizable} is a
+MultiPaxos variant that uses a technique called linearizable quorum reads to
+implement linearizable reads that bypass the leader and execute on only a
+single replica.
+%
+\TODO[mwhittaker]{Add more citations here.}
+
+Concretely, a PQR deployment is identical to a MultiPaxos deployment, and both
+protocols execute writes in the same way. To perform a read, however, a PQR
+client does not contact the leader. Instead, the client sends a
+\msg{MaxSlotA}{} message to at least a majority of the acceptors. When an
+acceptor $a_i$ receives a \msg{MaxSlotA}{} request from a client, it replies
+with a \msg{MaxSlotB}{s_i} message, where $s_i$ is the largest log entry in
+which $a_i$ has voted (i.e. in which it has sent a \msgfont{Phase2b} message).
+The client waits to receive \msg{MaxSlotB}{s_i} replies from at least a
+majority of acceptors and then computes $s$ as the maximum received $s_i$. The
+client then sends a \msg{Read}{x, s} message to any replica, with the read
+command $x$ and the slot $s$. When a replica receives a \msg{Read}{x, s}
+message, it waits until it has executed the write in log entry $s$, then
+executes $x$, and finally returns the result of executing $x$ back to the
+client. This is illustrated in \figref{LqrBackgroundDiagram}. It is not obvious
+why PQR ensures linearizability. In the next section, we'll provide a proof.
+
+{\input{figures/lqr_background_diagram.tex}}

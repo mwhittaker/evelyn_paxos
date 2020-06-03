@@ -10,10 +10,10 @@ that at most $f$ machines will fail for some configurable $f$.
 
 \subsection{Paxos}
 \defword{Consensus} is the act of choosing a single value among a set of
-proposed values. \defword{Paxos}~\cite{lamport1998part} is the most popular
-consensus protocol. We assume the reader is familiar with Paxos, but we pause
-to review the parts of the protocol that are most important to understand for
-the rest of this paper.
+proposed values, and \defword{Paxos}~\cite{lamport1998part} is the de facto
+standard consensus protocol. We assume the reader is familiar with Paxos, but
+we pause to review the parts of the protocol that are most important to
+understand for the rest of this paper.
 
 A Paxos deployment that tolerates $f$ faults consists of an arbitrary number of
 clients, at least $f+1$ \defword{proposers}, and $2f+1$ \defword{acceptors}, as
@@ -21,9 +21,9 @@ illustrated in \figref{PaxosBackgroundDiagram}. When a client wants to propose
 a value, it sends the value to a proposer $p$. The proposer then initiates a
 two-phase protocol. In Phase 1, the proposer contacts the acceptors and learns
 of any values that may have already been chosen. In Phase 2, the proposer
-proposes a value to the acceptors, and the acceptors vote to choose it. If a
-value receives votes from a majority of the acceptors, the value is considered
-chosen.
+proposes a value to the acceptors, and the acceptors vote on whether or not to
+choose the value. If a value receives votes from a majority of the acceptors,
+the value is considered chosen.
 
 More concretely, in Phase 1, $p$ sends \msgfont{Phase1a} messages to at least a
 majority of the $2f+1$ acceptors. When an acceptor receives a \msgfont{Phase1a}
@@ -62,8 +62,8 @@ is illustrated in \figref{StateMachineReplicationExample}.
 replication protocols. Again, we assume the reader is familiar with MultiPaxos,
 but we review the most salient bits.
 %
-MultiPaxos uses one instance of Paxos for every log entry, choosing the
-commands in the log one slot at a time.
+MultiPaxos uses one instance of Paxos for every log entry, choosing the command
+in the $i$th log entry using the $i$th instance of Paxos.
 %
 A MultiPaxos deployment that tolerates $f$ faults consists of an arbitrary
 number of clients, at least $f+1$ proposers, and $2f+1$ acceptors (like Paxos),
@@ -75,14 +75,14 @@ as well as at least $f+1$ replicas, as illustrated in
 Initially, one of the proposers is elected leader and runs Phase 1 of Paxos for
 every single log entry. When a client wants to propose a state machine command
 $x$, it sends the command to the leader. The leader assigns the command a log
-entry $i$ and then runs Phase 2 of Paxos to get the value chosen in entry $i$.
-That is, the leader sends \msg{Phase2a}{i, x} messages to the acceptors to vote
-for value $x$ in slot $i$. In the normal case, the acceptors all vote for $x$
-in slot $i$ and respond with \msg{Phase2b}{i, x} messages. Once the leader learns
-that a command has been chosen in a given log entry (i.e.\ once the leader
-receives \msg{Phase2b}{i, x} messages from a majority of the acceptors), it
-informs the replicas. Replicas insert chosen commands into their logs and
-execute the logs in prefix order.
+entry $i$ and then runs Phase 2 of the $i$th Paxos instance to get the value
+$x$ chosen in entry $i$.  That is, the leader sends \msg{Phase2a}{i, x}
+messages to the acceptors to vote for value $x$ in slot $i$. In the normal
+case, the acceptors all vote for $x$ in slot $i$ and respond with
+\msg{Phase2b}{i, x} messages. Once the leader learns that a command has been
+chosen in a given log entry (i.e.\ once the leader receives \msg{Phase2b}{i, x}
+messages from a majority of the acceptors), it informs the replicas. Replicas
+insert chosen commands into their logs and execute the logs in prefix order.
 
 Note that the leader assigns log entries to commands in increasing order. The
 first received command is put in entry $0$, the next command in entry $1$, the
@@ -91,8 +91,10 @@ next command in entry $2$, and so on.
 Also note that even though every replica executes every command, for any given
 state machine command $x$, only one replica needs to send the result of
 executing $x$ back to the client. For example, log entries can be round-robin
-partitioned across the replicas. With $n$ replicas for example, replica $r_i$
-returns results for log entries $j$ where $j \bmod n \equiv i$.
+partitioned across the replicas.
+%
+% With $n$ replicas for example, replica $r_i$ returns results for log entries
+% $j$ where $j \bmod n \equiv i$.
 
 \subsection{Compartmentalized MultiPaxos}
 Compartmentalized MultiPaxos~\cite{whittaker2020compartmentalized} is a
@@ -102,9 +104,9 @@ following three ways:
 \textbf{Difference 1: Proxy Leaders.}
 In a MultiPaxos deployment, every state machine command is sent to the leader,
 and the leader has to perform disproportionately more work per command than the
-acceptors and replicas (in most cases). Because of this, the MultiPaxos leader
-is a throughput bottleneck. MultiPaxos can process commands only as fast as the
-leader can.
+acceptors and replicas. Because of this, the MultiPaxos leader is a throughput
+bottleneck~\cite{mao2008mencius, moraru2013there}. MultiPaxos can process
+commands only as fast as the leader can.
 
 Compartmentalized MultiPaxos alleviates the leader bottleneck by noting that
 the MultiPaxos leader performs two independent responsibilities: sequencing and
@@ -114,38 +116,44 @@ assigned log entry 1, and so on. We call this \emph{sequencing}. The leader
 also has to communicate with the acceptors to execute Phase 2 of Paxos. We call
 this \emph{communication}. Compartmentalized MultiPaxos decouples the two
 responsibilities of sequencing and communication by introducing a set of at
-least $f+1$ \defword{proxy leaders}.
-
-After this decoupling, the leader performs sequencing, while the proxy leaders
-perform communication. Concretely, when a leader receives a state machine
-command, it assigns the command a log entry and then forms a \msgfont{Phase2a}
-message, as before. Now, however, it does \emph{not} communicate with the
-acceptors.  Instead, it sends the \msgfont{Phase2a} message to a randomly
-chosen proxy leader, and the proxy leader performs Phase 2 of Paxos and
-notifies the replicas of the chosen command. This is illustrated in
+least $f+1$ \defword{proxy leaders}, as shown in
 \figref{MultiPaxosProxyLeadersDiagram}.
-
-Note that because the leader load balances commands across the proxy leaders,
-and because the proxy leaders are independent, we can scale up the number of
-proxy leaders to avoid them being a throughput bottleneck.
 
 {\input{figures/multipaxos_proxy_leaders_diagram.tex}}
 
+The leader performs sequencing, while the proxy leaders perform communication.
+Concretely, when a Compartmentalized MultiPaxos leader receives a state machine
+command, it assigns the command a log entry and then forms a \msgfont{Phase2a}
+message, as with MultiPaxos. However, the leader does \emph{not} communicate
+with the acceptors. Instead, it sends the \msgfont{Phase2a} message to a
+randomly chosen proxy leader. The proxy leader then performs Phase 2 of Paxos
+and broadcasts chosen commands to the replicas. This is illustrated in
+\figref{MultiPaxosProxyLeadersDiagram}.
+
+The proxy leaders reduce the load on the leader, making the leader less of a
+throughput bottleneck. Moreover, because the leader load balances commands
+across the proxy leaders and because the proxy leaders are independent of one
+another, we can scale up the number of proxy leaders to avoid them becoming a
+throughput bottleneck as well.
+
 \textbf{Difference 2: Acceptor Groups.}
-MultiPaxos traditionally deploys a fixed set of $2f+1$ acceptors. For a
-\emph{single log entry}, the correctness of MultiPaxos depends crucially on
-this fact. However, Compartmentalized MultiPaxos notes that \emph{two
-different log entries} are independent and can use two different sets of
+MultiPaxos traditionally deploys a fixed set of $2f+1$ acceptors. The command
+in the $i$th log entry is chosen by the $i$th instance of Paxos, and the
+correctness of the $i$th instance of Paxos depends crucially on having a fixed
+set of $2f+1$ acceptors. However, Compartmentalized MultiPaxos notes that while
+a \emph{single} log entry requires a fixed set of acceptors, \emph{two
+different} log entries do not. The commands in distinct log entries are chosen
+by distinct instances of Paxos and therefore can use two different sets of
 acceptors.
-%
+
 Thus, Compartmentalized MultiPaxos deploys multiple sets of $2f+1$ acceptors,
 called \defword{acceptor groups}, with log entries round-robin partitioned
-between them. For example, with two acceptor groups, log entries 0, 2, 4, 6,
-$\ldots$ are chosen by the first acceptor group while log entries 1, 3, 5, 7,
-$\ldots$ are chosen by the second acceptor group. When a proxy leader receives
-a \msgfont{Phase2a} message from the leader in log entry $i$, it is careful to
-contact the appropriate acceptor group (i.e.\ acceptor group $i \bmod m$ for
-$m$ acceptor groups).
+between them. For example, with two acceptor groups, commands in log entries 0,
+2, 4, $\ldots$ are chosen by the first acceptor group while commands in log
+entries 1, 3, 5, $\ldots$ are chosen by the second acceptor group. When a proxy
+leader receives a \msgfont{Phase2a} message from the leader in log entry $i$,
+it is careful to contact the appropriate acceptor group (i.e.\ acceptor group
+$i \bmod m$ for $m$ acceptor groups).
 %
 This is illustrated in \figref{MultiPaxosMoreAcceptorsDiagram}.
 
@@ -153,11 +161,11 @@ This is illustrated in \figref{MultiPaxosMoreAcceptorsDiagram}.
 
 \textbf{Difference 3: More Replicas.}
 MultiPaxos is typically deployed with $f+1$ state machine replicas. MultiPaxos
-\emph{can} be deployed with more replicas, but the MultiPaxos leader has to
-contact \emph{every} replica. So, if we increase the number of replicas, the
-leader has to send more messages per command and becomes more of a throughput
-bottleneck.
-
+\emph{can} be deployed with more replicas, but the MultiPaxos leader broadcasts
+chosen commands to \emph{every} replica. So, if we increase the number of
+replicas, the leader has to send more messages per command and becomes more of
+a throughput bottleneck.
+%
 Compartmentalized MultiPaxos, on the other hand, can be deployed with a larger
 number of replicas without decreasing throughput, as illustrated in
 \figref{MultiPaxosMoreReplicasDiagram}. As we increase the number of

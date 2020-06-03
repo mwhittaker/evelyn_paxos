@@ -375,9 +375,9 @@ this paper). Other systems~\cite{bolosky2011paxos,ongaro2013search} rely on
 techniques that funnel reads through the leader. It will become clear later
 that these leader-based techniques do not allow for scalable reads.
 %
-The Paxos Quorum Read protocol (PQR)~\cite{charapko2019linearizable} is a
-MultiPaxos variant that uses a technique called linearizable quorum reads to
-implement linearizable reads that bypass the leader and execute on only a
+The \defword{Paxos Quorum Read} protocol (PQR)~\cite{charapko2019linearizable}
+is a MultiPaxos variant that uses a technique called linearizable quorum reads
+to implement linearizable reads that bypass the leader and execute on only a
 single replica.
 %
 \TODO[mwhittaker]{Add more citations here.}
@@ -390,12 +390,12 @@ acceptor $a_i$ receives a \msg{MaxSlotA}{} request from a client, it replies
 with a \msg{MaxSlotB}{s_i} message, where $s_i$ is the largest log entry in
 which $a_i$ has voted (i.e. in which it has sent a \msgfont{Phase2b} message).
 The client waits to receive \msg{MaxSlotB}{s_i} replies from at least a
-majority of acceptors and then computes $s$ as the maximum received $s_i$. The
-client then sends a \msg{Read}{x, s} message to any replica, with the read
-command $x$ and the slot $s$. When a replica receives a \msg{Read}{x, s}
-message, it waits until it has executed the write in log entry $s$, then
-executes $x$, and finally returns the result of executing $x$ back to the
-client. This is illustrated in \figref{LqrBackgroundDiagram}. It is not obvious
-why PQR ensures linearizability. In the next section, we'll provide a proof.
+majority of acceptors and then computes $s_\text{max}$ as the maximum received
+$s_i$. The client then sends a \msg{Read}{x} message to any replica, with the
+read command $x$. When a replica receives a \msg{Read}{x} message, it executes
+the read $x$. The replica then replies to the client with (a) the result of
+executing $x$ and (b) the slot $s$ of the replica's most recently executed
+write. We say $x$ \defword{reads from} slot $s$. If $s \geq s_\text{max}$, the
+read finishes successfully. Otherwise, the client retries the read later.
 
 {\input{figures/lqr_background_diagram.tex}}

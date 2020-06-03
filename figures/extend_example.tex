@@ -1,0 +1,17 @@
+\begin{figure}[ht]
+  \begin{tikzpicture}[yscale=0.75]
+    \drawclients{5}{7.5}
+    \pendingoperation{1}{0}{7}{$w_0$}
+    \operation{2}{1}{2}{$w_1$}{}
+    \pendingoperation{2}{3}{7}{$w_2$}
+    \operation{3}{2.5}{3.5}{$r_2$}{}
+    \pendingoperation{3}{4}{7}{$w_4$}
+    \operation{4}{4}{5}{$r_2$}{}
+    \pendingoperation{4}{6}{7}{$w_?$}
+    \pendingoperation{5}{2}{7}{$r_?$}
+  \end{tikzpicture}
+  \caption{%
+    An example history $G$. Responses are not shown, as they are not important
+    for this example.
+  }\figlabel{ExtendExample}
+\end{figure}

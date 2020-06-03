@@ -1,1 +1,206 @@
 \section{Evelyn Paxos}
+In this section, we first describe \emph{how} Evelyn Paxos works
+(\secref{EvelynPaxos/Overview}) and then \emph{why} it is safe
+(\secref{EvelynPaxos/SafetyProof}). We then discuss liveness
+(\secref{EvelynPaxos/Liveness}) and non-linearizable reads
+(\secref{EvelynPaxos/NonLinearizableReads}).
+
+\subsection{Overview}\seclabel{EvelynPaxos/Overview}
+The Paxos Quorum Read protocol (PQR) allows reads to bypass the leader and
+execute on a single replica. However, a client executing a read must contact at
+least a majority of a fixed set of $2f+1$ acceptors. Thus, the acceptors are a
+bottleneck that limits the read throughput of the protocol. Moreover, if we
+increase the number of replicas in a PQR deployment to increase \emph{read}
+throughput, we increase the communication load on the leader and decrease the
+deployment's \emph{write} throughput.
+
+Compartmentalized MultiPaxos, on the other hand, deploys multiple acceptor
+groups and can scale up the number replicas without impacting write throughput.
+Compartmentalized MultiPaxos, however, does not distinguish reads from writes.
+All state machine commands are sent to the leader, placed in the replicated
+log, and executed by all replicas.
+
+\defword{Evelyn Paxos} is the straightforward combination of Compartmentalized
+MultiPaxos and PQR. By combining the strengths of the two protocols, Evelyn
+Paxos achieves scalable, linearizable reads that bypass the leader and execute
+at a single replica.
+
+An Evelyn Paxos deployment is identical to a Compartmentalized MultiPaxos
+deployment, and both protocols process writes in exactly the same way. Evelyn
+Paxos reads are very similar to PQR reads with a few minor differences.
+
+Concretely, to perform a read, an Evelyn Paxos client sends \msg{MaxSlotA}{}
+messages to at least a majority of acceptors in any single acceptor group. The
+client does \emph{not} have to contact all of the acceptor groups, just a
+single one.
+%
+When an acceptor $a_i$ receives a \msg{MaxSlotA}{} request from a client, it
+replies with a \msg{MaxSlotB}{s_i} message, where $s_i$ is the largest log
+entry in which $a_i$ has voted, or $0$ if $a_i$ has not yet voted in any log
+entry.
+
+The client waits to receive \msg{MaxSlotB}{s_i} replies from at least a
+majority of the acceptors in a single group and then computes $s_\text{max}$ as
+the maximum received $s_i$. Let $m$ be the number of acceptor groups. The
+client computes $s = s_\text{max} + m - 1$ and then sends a \msg{Read}{x, s}
+message to any replica, with the read command $x$ and the slot $s$.
+%
+When a replica receives a \msg{Read}{x, s} message, it waits until it has
+executed the write in log entry $s$, then executes $x$, and finally returns the
+result of executing $x$ back to the client. This is illustrated in
+\figref{EvelynPaxos}.
+
+Note that a replica can service a \msg{Read}{x, s} message even if it has
+already executed writes in log entries larger than $s$. That is, $x$ does not
+have to read from $s$ exactly; it just has to read from a log entry at least as
+large as $s$. We also re-emphasize that reads wait for writes. We discuss the
+liveness and performance implications of this later.
+
+{\input{figures/evelyn_paxos.tex}}
+
+Because an Evelyn Paxos read involves only a single acceptor group and a single
+replica, we can scale up the number of acceptor groups and replicas to increase
+the protocol's aggregate read throughput.
+
+% Recall that Paxos Quorum Reads does not allow for high read throughput because
+% the acceptors or replicas eventually become a bottleneck. With Evelyn Paxos,
+% however, both the acceptors and the replicas are scalable. Thus, by increasing
+% the number of acceptor groups and replicas, read throughput increases without
+% any bottlenecks.
+
+\subsection{Safety Proof}\seclabel{EvelynPaxos/SafetyProof}
+We now prove that Evelyn Paxos is linearizable. We provide a proof not only to
+convince you that the protocol is safe, but also to help build some intuition
+on the protocol. For example, the proof should hopefully make clear why Evelyn
+Paxos requires a $+\ m - 1$ term that PQR does not.
+
+\newcommand{\complete}{\text{complete}}
+\begin{proof}
+  Let $H$ be an arbitrary history permitted by Evelyn Paxos. To prove that
+  Evelyn Paxos is linearizable, we must extend $H$ to a history $H'$ such that
+  $\complete(H')$ is equivalent to a sequential history that respects $<_H$.
+
+  Recall that extending $H$ to $H'$ is sometimes necessary because of
+  situations like the one shown in \figref{WhyExtendHistory}. This example
+  involves a single register with an initial value of 0. $c_1$ issues a request
+  to write the value of 1, but has not yet received a response. $c_2$ issues a
+  read request and receives the value 1. If we do not extend the history to
+  include a response to $c_1$'s write, then there will not exist an equivalent
+  sequential history.
+
+  {\input{figures/why_extend_history.tex}}
+
+  So, which operations should we include in $H'$? Let $k$ be the largest log
+  index written in or read from in $\complete(H)$. First note that for every
+  index $0 \leq i \leq k$, there exists a (potentially pending) write in $H$
+  that has been chosen in index $i$. Why?  Well, Evelyn Paxos, like MultiPaxos,
+  executes commands in log order, so a write at index $k$ can only complete
+  after all writes with smaller indices have been chosen (and executed by some
+  replica). Similarly, if a read operation reads from slot $k$, then the write
+  in slot $k$ must have been executed, so again all writes with smaller indices
+  have also been chosen.
+  %
+  We extend $H$ to history $H'$ by including responses for all pending write
+  invocations with indices $0 \leq i \leq k$. The responses are formed by
+  executing the $k + 1$ commands in log order.
+
+  For example, consider the history $G$ shown in \figref{ExtendExample}. $w_i$
+  represents a write chosen in log index $i$, $r_i$ represents a read operation
+  that reads from slot $i$, $w_?$ represents a pending write which has not been
+  chosen in any particular log index, and $r_?$ represents a pending read.
+  %
+  $\complete(G)$ includes $w_1$ and $r_2$, so here $k=2$ and we must include
+  all writes in indices $0$, $1$, and $2$. That is, we extend $G$ to complete
+  $w_0$ and $w_2$. $w_4$ is left pending, as is $w_?$ and $r_?$. Also note
+  that we could not complete $w_4$ even if we wanted to because there is no
+  $w_3$.
+
+  {\input{figures/extend_example.tex}}
+
+  Now, we must prove that (1) $\complete(H')$ is equivalent to some legal
+  sequential history $S$, and (2) $<_H$ respects $<_S$. We let $S$ be the
+  sequential history formed from executing all writes in log order and from
+  executing every read from index $i$ after the write in index $i$.
+  %
+  If there are multiple reads from index $i$, the reads are ordered in an
+  arbitrary way that respects $<_H$. For example, the history $G$ in
+  \figref{ExtendExample} has the sequential history $S_G$ shown in
+  \figref{ExampleS}. Note that $c_4$'s read comes after $c_3$'s read. This is
+  essential because we must respect $<_G$. If the two reads were concurrent in
+  $G$, they could be ordered arbitrarily in $S_G$.
+
+  {\input{figures/example_s.tex}}
+
+  To prove (1) and (2), we show that if two distinct operations $x$ and $y$
+  that write to (or read from) log indices $i$ and $j$ are related in
+  $H$---i.e. $x <_H y$, or $x$ finishes before $y$ begins---then $i \leq j$. We
+  perform a case analysis on whether $x$ and $y$ are reads or writes.
+
+  \begin{itemize}
+    \item \textbf{$x$ and $y$ are both writes:}
+      At the time $x$ completes in index $i$, all commands in indices less than
+      $i$ have been chosen because Evelyn Paxos executes commands in log order.
+      Thus, when $y$ later begins, it cannot be chosen in a log entry less than
+      $i$, since every log entry implements consensus. Thus, $i < j$.
+
+    \item \textbf{$x$ and $y$ are both reads:}
+      When $x$ completes, command $i$ has been chosen. So have commands $i-1$,
+      $i-2$, $i-3$, $\ldots$, $i-(m-1)$. Each of these $m$ commands were chosen
+      by a different acceptor group.
+      %
+      When $y$ begins, it sends \msg{MaxSlotA}{} messages to some majority
+      $M_1$ of some acceptor group. Assume this acceptor group chose log entry
+      $i - j$ for some $0 \leq j \leq m-1$.  Because log entry $i-j$ was chosen
+      by the acceptor group, at least a majority $M_2$ of the acceptor group
+      voted for log entry $i-j$.  Any two majorities intersect, including $M_1$
+      and $M_2$.  Thus, the client executing $y$ will receive a
+      \msg{MaxSlotB}{s_i} response from some acceptor in $M_2$ with $s_i \geq
+      i-j$. Therefore, $s_\text{max} \geq i - j$ and
+      \[
+        s = s_\text{max} + m - 1
+          \geq i - j + m - 1
+          \geq i - (m-1) + (m - 1)
+          = i
+      \]
+      Therefore, $y$ is guaranteed to read from some $j \geq s = i$.
+
+    \item \textbf{$x$ is a read and $y$ is a write:}
+      When $x$ completes, all commands in indices $i$ and smaller have been
+      chosen. By the first case above, $y$ must be chosen in some index $j >
+      i$.
+
+    \item \textbf{$x$ is a write and $y$ is a read:}
+      When $x$ completes, command $i$ has been chosen. If $i \leq m-1$, then $j \geq
+      i$ immediately since $i = i' + m - 1$ for some natural number $i'$.
+      Otherwise, $i > m - 1$. $i$ has been chosen, and so has $i-1$ through
+      $i-(m-1)$, each by a different acceptor group.
+      %
+      As with the second case above, when $y$ begins it will contact an
+      acceptor group with a largest chosen value at least as large as $i-(m-1)$
+      and will subsequently read from at least $i$.
+  \end{itemize}
+
+  From this, (1) is immediate since every client's operations are in the same
+  order in $H'$ and in $S$. (2) holds because $S$ is ordered by log index with
+  ties broken respecting $<_H$, so if $x <_H y$, then $i \leq j$ and $x <_S y$.
+\end{proof}
+
+\subsection{Ensuring Liveness}\seclabel{EvelynPaxos/Liveness}
+When an Evelyn Paxos replica receives a read request at index $s$, it cannot
+perform the read until it has executed the write in log entry $s$. The duration
+of time that the replica must wait depends on the throughput of writes being
+sent to the Evelyn Paxos deployment. In the extreme, if no writes are being
+proposed, then the replica could stall, waiting forever to execute log entry
+$s$, even though no command has been or will be proposed to fill it. This is a
+liveness violation.
+
+Fortunately, this problem is easy to fix. An Evelyn Paxos leader periodically
+proposes a noop in the log. This ensures that all reads are eventually
+serviced. The period at which an Evelyn Paxos leader proposes noops is a
+tunable parameter. For workloads with few writes or no writes, the leader
+should propose noops often to decrease read latency. For workloads with high
+write throughputs, however, the leader does not have to propose noops often if
+at all.
+
+\subsection{Non-Linearizable Reads}\seclabel{EvelynPaxos/NonLinearizableReads}
+\TODO[mwhittaker]{Write.}

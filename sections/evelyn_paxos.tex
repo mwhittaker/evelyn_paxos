@@ -118,7 +118,7 @@ Paxos requires a $+\ m - 1$ term that PQR does not.
   {\input{figures/extend_example.tex}}
 
   Now, we must prove that (1) $\complete(H')$ is equivalent to some legal
-  sequential history $S$, and (2) $<_H$ respects $<_S$. We let $S$ be the
+  sequential history $S$, and (2) $<_S$ respects $<_H$. We let $S$ be the
   sequential history formed from executing all writes in log order and from
   executing every read from index $i$ after the write in index $i$.
   %
@@ -203,4 +203,49 @@ write throughputs, however, the leader does not have to propose noops often if
 at all.
 
 \subsection{Non-Linearizable Reads}\seclabel{EvelynPaxos/NonLinearizableReads}
-\TODO[mwhittaker]{Write.}
+Evelyn Paxos provides linearizability, the strongest form of non-transactional
+consistency. However, we can extend Evelyn Paxos to support reads with better
+performance but weaker consistency. Notably, we can implement sequentially
+consistent~\cite{lamport1979make} and eventually consistent reads.
+
+\textbf{Sequentially Consistent Reads.}
+Sequential consistency is a lot like linearizability but without the real-time
+ordering requirements. Specifically, a history $H$ is sequentially consistent
+if we can extend it to some history $H'$ such that complete($H'$) is equivalent
+to some sequential history $S$. Unlike with linearizability, we do not require
+that $<_S$ respects $<_H$.
+
+To implement sequentially consistent reads, every client needs to (a) keep
+track of the largest log entry it has ever written to or read from, and (b)
+make sure that all future operations write to or read from a log entry as least
+as large.  Concretely, we make the following changes to Evelyn Paxos:
+\begin{itemize}
+  \item
+    Every client $c_i$ maintains an integer-valued watermark $w_i$, initially
+    $-1$.
+  \item
+    When a replica executes a write $w$ in log entry $j$ and returns the result
+    of executing $w$ to a client $c_i$, it also includes $j$. When $c_i$
+    receives a write index $j$ from a replica, it updates $w_i$ to the max of
+    $w_i$ and $j$.
+  \item
+    To execute a sequentially consistent read $r$, a client $c_i$ sends a
+    \msg{Read}{r, w_i} to any replica. The replica waits until it has executed
+    the write in log entry $w_i$ and then executes $r$. It then replies to the
+    client with the result of executing $r$ and the log entry $j$ from which
+    $r$ reads. Here, $j \geq w_i$. When a client receives a read index $j$, it
+    updates $w_i$ to the max of $w_i$ and $j$.
+\end{itemize}
+
+Note that a client can finish a sequentially consistent read after one
+round-trip of communication (in the best case), whereas a linearizabile read
+requires at least two. Moreover, sequentially consistent reads do not involve
+the acceptors. This means that we can increase read throughput by scaling up
+the number of replicas without having to scale up the number of acceptor groups.
+
+\textbf{Eventually Consistent Reads.}
+Eventually consistent reads are trivial to implement. To execute an eventually
+consistent read, a client simply sends the read request $r$ directly to any
+replica. The replica executes the read immediately and returns the result back
+to the client. Eventually consistent reads do not require any watermark
+bookkeeping, do not involve acceptors, and never wait for writes.

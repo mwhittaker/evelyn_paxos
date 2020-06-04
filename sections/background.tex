@@ -335,8 +335,8 @@ happens before relation.
 
 Finally, a history $H$ is \defword{linearizable} if it can be extended (by
 appending zero or more response events) to some history $H'$ such that (a)
-complete($H'$) is equivalent to some sequential history $S$, and (b) $<_H$
-respects $<_S$ (i.e.\ if two operations are ordered in $H$, they must also be
+complete($H'$) is equivalent to some sequential history $S$, and (b) $<_S$
+respects $<_H$ (i.e.\ if two operations are ordered in $H$, they must also be
 ordered in $S$). $S$ is called a \defword{linearization}. The history
 $H_{wwr}$, for example, is linearizable with the linearization
 \[
